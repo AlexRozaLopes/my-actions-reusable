@@ -1,0 +1,58 @@
+name: ci simple
+
+on:
+  workflow_call:
+    inputs:
+      DOCKER_IMAGE_NAME:
+        description: "Nome da Imagem docker"
+        required: true
+        type: string
+      DOCKER_FILE_PATH:
+        description: "Caminho do dockerfile"
+        required: true
+        type: string
+      APPLICATION_PATH:
+        description: "Caminho base do projeto"
+        required: true
+        type: string
+
+
+permissions:
+  packages: write
+
+env:
+  DOCKER_USER: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn -B package --file {{ inputs.APPLICATION_PATH }}/pom.xml
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker image
+        run: |
+          DOCKER_USER_LOWER=${DOCKER_USER,,}
+          echo "Docker user lower: $DOCKER_USER_LOWER"
+          
+          docker build -t ghcr.io/$DOCKER_USER_LOWER/{{ inputs.DOCKER_IMAGE_NAME }}:latest -f {{ inputs.DOCKER_FILE_PATH }}/Dockerfile {{ inputs.APPLICATION_PATH }}/
+          
+          docker push ghcr.io/$DOCKER_USER_LOWER/{{ inputs.DOCKER_IMAGE_NAME }}:latest
